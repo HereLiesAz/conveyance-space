@@ -52,7 +52,11 @@ Example composable manifest referencing this library:
 - **`Templates`** (`Templates.kt`) -- the `templateId` registry. Four templates:
   - `space.star.system` -- a star that reveals `planetCount` planets on engagement
     (`Consequence.Reveal` read literally): each animates outward from the star's own center to
-    its real Kepler orbit and then keeps orbiting, rather than simply appearing there.
+    its real Kepler orbit and then keeps orbiting, rather than simply appearing there. `hasMoon`
+    gives the *outermost* planet its own moon, orbiting *it* on a separate, much faster timing
+    reference (a moon orbits its planet's far smaller mass, not the star's) -- the moon's screen
+    position is the planet's own current position plus its own orbital offset, genuinely nested
+    motion, not a decoration riding along.
   - `space.moon.loading` -- a loading indicator: a moon orbiting a planet. Indeterminate progress
     (`ActState.Yielding` with a `null` extent) spins continuously; determinate progress maps the
     fraction directly onto orbital angle, so a moon back at 12 o'clock reads as "done" the way a
@@ -78,13 +82,22 @@ Example composable manifest referencing this library:
   manifest element carries exactly one `act` (azphalt `spec/composable.md`), and `Collection`
   inherently needs a caller-owned list of items each with its *own* act -- a shape the
   single-element `ComposableRequest` can't express. A host wires this up directly.
+- **`BinaryStarSystem`** (`BinaryStars.kt`) -- two stars, `primary`/`companion`, orbiting their
+  shared barycenter 180° out of phase -- real binary-star mechanics, not one star with a smaller
+  companion parked beside it. Each star's own orbital radius is inversely proportional to its own
+  `StarSize` diameter (a mass stand-in), the two always summing to a fixed total separation, so
+  the heavier star traces the tighter orbit -- the same reason Sirius A (the heavier of that real
+  pair) orbits closer to their barycenter than Sirius B does. **Not** a `Templates.registry`
+  entry, for the same reason `LiquidField` (`conveyance-liquid`) isn't: it needs two independent
+  `ComposableRequest`s, each with its own `act`, a shape a single manifest element can't express.
 
 ## Status
 
-Four templates plus one genuine cross-element composable (`BlackHoleField`), each covering one of
-the concept's named phenomena, but each is a single instance: `space.star.system` doesn't support
-nested moons around its own planets, and `space.star.pulsar` isn't wired to `space.star.system`'s
-star (a system's star can't currently *be* a pulsar).
+Four templates plus two genuine cross-element/multi-body composables (`BlackHoleField`,
+`BinaryStarSystem`). What's still not here: `space.star.pulsar` isn't wired to
+`space.star.system`'s star (a system's star can't currently *be* a pulsar), and a binary system's
+two stars can't themselves each have their own planets -- `BinaryStarSystem` and `StarSystem`
+don't compose.
 
 ## Using it
 

@@ -44,7 +44,7 @@ import kotlin.math.sin
  * live [Act] the element performs. `hue` names a [SpectralClass] (`"O"`.."M"`, real black-body
  * color by temperature); `rank` (reusing the manifest's `hue`-adjacent semantic-rank vocabulary,
  * same as `conveyance-expressive`) names a [StarSize] -- the two independent axes of a real
- * Hertzsprung-Russell diagram. [planetCount] is only used by `space.star.system`.
+ * Hertzsprung-Russell diagram. [planetCount]/[hasMoon] are only used by `space.star.system`.
  */
 data class ComposableRequest(
     val act: Act,
@@ -53,6 +53,8 @@ data class ComposableRequest(
     val scale: String,
     val label: String? = null,
     val planetCount: Int = 3,
+    /** Whether the outermost planet has its own moon orbiting it, in `space.star.system`. */
+    val hasMoon: Boolean = false,
 )
 
 /**
@@ -72,6 +74,8 @@ object Templates {
 private const val PLANET_BASE_RADIUS_DP = 36f
 private const val PLANET_SPACING_DP = 20f
 private const val PLANET_ORBIT_REFERENCE_MILLIS = 3200
+private const val MOON_BASE_RADIUS_DP = 12f
+private const val MOON_ORBIT_REFERENCE_MILLIS = 900
 
 /**
  * A star that reveals its planets on engagement -- [com.hereliesaz.conveyance.Consequence.Reveal]
@@ -80,6 +84,14 @@ private const val PLANET_ORBIT_REFERENCE_MILLIS = 3200
  * appearing there, and each period derived from [Orbits.periodMillisFor] (Kepler's third law) --
  * an outer planet takes longer to complete an orbit because it has farther to travel and moves
  * slower doing it, not because an author chose a bigger number for it.
+ *
+ * [ComposableRequest.hasMoon] gives the *outermost* planet its own moon, orbiting *it* rather
+ * than the star -- a genuinely separate orbital system, timed independently
+ * ([MOON_ORBIT_REFERENCE_MILLIS], much faster than any planet's period, since a moon orbits its
+ * planet's far smaller mass, not the star's) rather than sharing the star-relative Kepler
+ * reference [PLANET_ORBIT_REFERENCE_MILLIS] uses. The moon's screen position is the planet's own
+ * *current* position plus its own orbital offset -- it moves because its parent planet moves,
+ * genuinely nested motion, not a fixed decoration riding along.
  */
 @Composable
 fun StarSystem(request: ComposableRequest) {
@@ -120,18 +132,47 @@ fun StarSystem(request: ComposableRequest) {
                     )
                     val radians = angleDegrees * PI / 180.0
                     val currentRadiusPx = orbitRadiusPx * revealProgress.value
+                    val planetX = currentRadiusPx * cos(radians)
+                    val planetY = currentRadiusPx * sin(radians)
                     Box(
                         modifier = Modifier
                             .size(6.dp)
-                            .offset {
-                                IntOffset(
-                                    x = (currentRadiusPx * cos(radians)).toInt(),
-                                    y = (currentRadiusPx * sin(radians)).toInt(),
-                                )
-                            }
+                            .offset { IntOffset(x = planetX.toInt(), y = planetY.toInt()) }
                             .clip(CircleShape)
                             .background(Color(0xFF7E97A6)),
                     )
+
+                    if (request.hasMoon && index == request.planetCount - 1) {
+                        // A single moon at one fixed radius has nothing to scale relative to --
+                        // Kepler's law compares *different* orbits around the *same* body, and
+                        // there's only one orbit here, so MOON_ORBIT_REFERENCE_MILLIS is used
+                        // directly rather than routed through Orbits.periodMillisFor for a ratio
+                        // that would always come out to 1.0 anyway.
+                        val moonOrbitRadiusPx = with(density) { MOON_BASE_RADIUS_DP.dp.toPx() }
+                        val moonTransition = rememberInfiniteTransition(label = "moon")
+                        val moonAngleDegrees by moonTransition.animateFloat(
+                            initialValue = 0f,
+                            targetValue = 360f,
+                            animationSpec = infiniteRepeatable(
+                                tween(MOON_ORBIT_REFERENCE_MILLIS, easing = LinearEasing),
+                            ),
+                            label = "moon-angle",
+                        )
+                        val moonRadians = moonAngleDegrees * PI / 180.0
+                        val moonCurrentRadiusPx = moonOrbitRadiusPx * revealProgress.value
+                        Box(
+                            modifier = Modifier
+                                .size(3.dp)
+                                .offset {
+                                    IntOffset(
+                                        x = (planetX + moonCurrentRadiusPx * cos(moonRadians)).toInt(),
+                                        y = (planetY + moonCurrentRadiusPx * sin(moonRadians)).toInt(),
+                                    )
+                                }
+                                .clip(CircleShape)
+                                .background(Color(0xFFB8BCC0)),
+                        )
+                    }
                 }
             }
 
