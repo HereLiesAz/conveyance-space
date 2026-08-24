@@ -1,6 +1,7 @@
 package com.hereliesaz.conveyance.space
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -16,6 +17,7 @@ import com.hereliesaz.conveyance.SubjectId
 import com.hereliesaz.conveyance.compose.ActScope
 import com.hereliesaz.conveyance.compose.Collection
 import com.hereliesaz.conveyance.compose.Offer
+import com.hereliesaz.conveyance.compose.tell
 
 private val DEBRIS_DIAMETER = 8.dp
 
@@ -72,6 +74,8 @@ fun BlackHoleField(
 private fun ActScope.SpawnControl() {
     Box(
         modifier = Modifier
+            .tell(owesTell, weight)
+            .clickable { engage() }
             .size(10.dp)
             .clip(CircleShape)
             .background(Color(0xFF7E97A6)),
@@ -85,6 +89,8 @@ private fun DebrisChip(debris: DebrisRequest) {
     Offer(act = debris.act) {
         Box(
             modifier = Modifier
+                .tell(owesTell, weight)
+                .clickable { engage() }
                 .padding(2.dp)
                 .size(DEBRIS_DIAMETER)
                 .clip(CircleShape)

@@ -6,6 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -19,6 +20,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.hereliesaz.conveyance.compose.Offer
+import com.hereliesaz.conveyance.compose.tell
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -74,6 +76,8 @@ fun BinaryStarSystem(primary: ComposableRequest, companion: ComposableRequest) {
         Offer(act = primary.act) {
             Box(
                 modifier = Modifier
+                    .tell(owesTell, weight)
+                    .clickable { engage() }
                     .size(primarySize.diameter)
                     .offset {
                         IntOffset(
@@ -88,6 +92,8 @@ fun BinaryStarSystem(primary: ComposableRequest, companion: ComposableRequest) {
         Offer(act = companion.act) {
             Box(
                 modifier = Modifier
+                    .tell(owesTell, weight)
+                    .clickable { engage() }
                     .size(companionSize.diameter)
                     .offset {
                         IntOffset(

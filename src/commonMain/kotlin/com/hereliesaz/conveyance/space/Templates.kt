@@ -8,7 +8,9 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -18,7 +20,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,11 +37,27 @@ import androidx.compose.ui.unit.lerp as lerpDp
 import com.hereliesaz.conveyance.Act
 import com.hereliesaz.conveyance.ActState
 import com.hereliesaz.conveyance.compose.Offer
+import com.hereliesaz.conveyance.compose.tell
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
+
+// Every template attaches Modifier.tell(owesTell, weight).clickable { engage() } to its outermost
+// shape -- the wiring Conveyance's own demo (conveyance-demo/.../Gallery.kt) uses at every real
+// Offer call site. Without it a template still renders correctly but is inert: nothing engages
+// the act on tap, so ActState can never leave Ready through this template alone.
+
+/** A visible, full-opacity marker for [ActState.Blocked] -- never reduced opacity
+ *  ([ActState.Blocked]'s own doc: "Never renders as reduced opacity"), so every template that
+ *  needs to mark a blocked state distinctly from [ActState.Ready] does it with this color, not
+ *  with alpha. */
+private val BLOCKED_MARKER_COLOR = Color(0xFFE8B339)
+
+/** A visible marker for [ActState.Refused] -- distinct from [BLOCKED_MARKER_COLOR] so a person
+ *  can tell "can't yet" from "tried and failed" at a glance. */
+private val REFUSED_MARKER_COLOR = Color(0xFFE0453B)
 
 /**
  * What a `kind: "composable"` `.azp` package's `elements[]` entry (azphalt `spec/composable.md`)
@@ -92,6 +113,12 @@ private const val MOON_ORBIT_REFERENCE_MILLIS = 900
  * reference [PLANET_ORBIT_REFERENCE_MILLIS] uses. The moon's screen position is the planet's own
  * *current* position plus its own orbital offset -- it moves because its parent planet moves,
  * genuinely nested motion, not a fixed decoration riding along.
+ *
+ * Planets are revealed only for [ActState.Yielding]/[ActState.Settled] -- [ActState.Ready] and
+ * [ActState.Blocked] both stay unrevealed, since neither is "engaged and working." A blocked
+ * star still marks itself, at full opacity ([ActState.Blocked]'s own doc: "Never renders as
+ * reduced opacity") via [BLOCKED_MARKER_COLOR]'s ring; a refused one flashes
+ * [REFUSED_MARKER_COLOR] once before settling back.
  */
 @Composable
 fun StarSystem(request: ComposableRequest) {
@@ -102,10 +129,17 @@ fun StarSystem(request: ComposableRequest) {
 
     Box(modifier = Modifier.size(outerDiameter), contentAlignment = Alignment.Center) {
         Offer(act = request.act) {
-            val revealed = state !is ActState.Ready
+            val revealed = state is ActState.Yielding || state is ActState.Settled
             val revealProgress = remember { Animatable(0f) }
             LaunchedEffect(revealed) {
                 revealProgress.animateTo(if (revealed) 1f else 0f, tween(if (revealed) 700 else 300))
+            }
+            val refusedFlash = remember { Animatable(0f) }
+            LaunchedEffect(state) {
+                if (state is ActState.Refused) {
+                    refusedFlash.snapTo(1f)
+                    refusedFlash.animateTo(0f, tween(500))
+                }
             }
 
             repeat(request.planetCount) { index ->
@@ -178,9 +212,14 @@ fun StarSystem(request: ComposableRequest) {
 
             Box(
                 modifier = Modifier
+                    .tell(owesTell, weight)
+                    .clickable { engage() }
                     .size(starSize.diameter)
                     .clip(CircleShape)
-                    .background(spectralClass.color),
+                    .background(lerp(spectralClass.color, REFUSED_MARKER_COLOR, refusedFlash.value))
+                    .let { base ->
+                        if (state is ActState.Blocked) base.border(2.dp, BLOCKED_MARKER_COLOR, CircleShape) else base
+                    },
             )
         }
         request.label?.let {
@@ -190,6 +229,9 @@ fun StarSystem(request: ComposableRequest) {
 }
 
 private const val MOON_SPIN_MILLIS = 1400
+private const val ANGLE_SETTLE_MILLIS = 260
+private val READY_MOON_COLOR = Color(0xFFC9C9C9)
+private val SETTLED_MOON_COLOR = Color(0xFFFFFFFF)
 
 /**
  * A loading indicator: a moon orbiting a planet. Indeterminate progress
@@ -197,7 +239,12 @@ private const val MOON_SPIN_MILLIS = 1400
  * continuously at constant angular velocity -- the real indeterminate-spinner case, since there
  * is no known endpoint to point toward. Determinate progress (a non-null extent) maps the
  * fraction directly onto orbital angle: a moon at "12 o'clock" is a real, readable "done" the
- * way a percentage number alone isn't at a glance.
+ * way a percentage number alone isn't at a glance. The switch from indeterminate to determinate
+ * (or back to rest) animates from wherever the spin last visibly was, rather than teleporting.
+ *
+ * The moon's own color, not just its position, carries [ActState.Blocked]/[ActState.Refused]/
+ * [ActState.Settled] -- [ActState.Ready] and [ActState.Settled] both park the moon at 12 o'clock,
+ * so position alone can't tell "not started" from "done"; color does.
  */
 @Composable
 fun MoonLoading(request: ComposableRequest) {
@@ -216,18 +263,44 @@ fun MoonLoading(request: ComposableRequest) {
                 label = "spin",
             )
             val yieldingExtent = (state as? ActState.Yielding)?.extent
+            val indeterminate = state is ActState.Yielding && yieldingExtent == null
             // -90 degrees is 12 o'clock in this offset's coordinates (angle 0 would be 3
             // o'clock); a full lap from there and back reads as "started home, ended home."
-            val angleDegrees = when {
-                state is ActState.Yielding && yieldingExtent == null -> spinAngle
-                state is ActState.Yielding -> -90f + (yieldingExtent ?: 0f) * 360f
-                else -> -90f
+            val restAngle = -90f
+            val determinateTarget = if (state is ActState.Yielding && yieldingExtent != null) {
+                restAngle + yieldingExtent * 360f
+            } else {
+                restAngle
             }
+            val settledAngle = remember { Animatable(restAngle) }
+            var wasIndeterminate by remember { mutableStateOf(false) }
+            LaunchedEffect(indeterminate, determinateTarget) {
+                if (indeterminate) {
+                    wasIndeterminate = true
+                    return@LaunchedEffect
+                }
+                if (wasIndeterminate) {
+                    // Seed from wherever the indeterminate spin last visibly was, so this doesn't
+                    // teleport from an arbitrary spin position straight to the new target.
+                    settledAngle.snapTo(spinAngle)
+                    wasIndeterminate = false
+                }
+                settledAngle.animateTo(determinateTarget, tween(ANGLE_SETTLE_MILLIS))
+            }
+            val angleDegrees = if (indeterminate) spinAngle else settledAngle.value
             val radians = angleDegrees * PI / 180.0
             val moonOrbitRadiusPx = with(LocalDensity.current) { moonOrbitRadiusDp.dp.toPx() }
+            val moonColor = when (state) {
+                is ActState.Blocked -> BLOCKED_MARKER_COLOR
+                is ActState.Refused -> REFUSED_MARKER_COLOR
+                ActState.Settled -> SETTLED_MOON_COLOR
+                else -> READY_MOON_COLOR
+            }
 
             Box(
                 modifier = Modifier
+                    .tell(owesTell, weight)
+                    .clickable { engage() }
                     .size(planetDiameter)
                     .clip(CircleShape)
                     .background(spectralClass.color),
@@ -242,13 +315,14 @@ fun MoonLoading(request: ComposableRequest) {
                         )
                     }
                     .clip(CircleShape)
-                    .background(Color(0xFFC9C9C9)),
+                    .background(moonColor),
             )
         }
     }
 }
 
 private const val PULSAR_ROTATION_MILLIS = 900
+private const val PULSAR_REST_ANGLE = 0f
 
 /**
  * A rotating lighthouse beam, the real mechanism behind a pulsar's regular flash -- not a pulsing
@@ -258,6 +332,12 @@ private const val PULSAR_ROTATION_MILLIS = 900
  * single ray). The core brightens each time the beam sweeps past. For an "urgent"/"just
  * happened" indicator -- [com.hereliesaz.conveyance.Meaning.Heat], the meaning
  * [com.hereliesaz.conveyance.Channel.Chroma] carries.
+ *
+ * Rotation, and the flash it drives, run only while [ActState.Yielding] -- the "urgent, actively
+ * happening" state this indicator exists for. [ActState.Ready]/[ActState.Blocked] hold the beam
+ * still at rest; [ActState.Settled] freezes it at wherever it last swept to, core held at full
+ * brightness (done, not still flashing); [ActState.Blocked]/[ActState.Refused] mark the core in
+ * [BLOCKED_MARKER_COLOR]/[REFUSED_MARKER_COLOR] at full opacity rather than white.
  */
 @Composable
 fun Pulsar(request: ComposableRequest) {
@@ -266,40 +346,70 @@ fun Pulsar(request: ComposableRequest) {
 
     Box(modifier = Modifier.size(beamLength), contentAlignment = Alignment.Center) {
         Offer(act = request.act) {
+            val rotating = state is ActState.Yielding
             val transition = rememberInfiniteTransition(label = "pulsar")
-            val beamAngle by transition.animateFloat(
+            val spinningAngle by transition.animateFloat(
                 initialValue = 0f,
                 targetValue = 360f,
                 animationSpec = infiniteRepeatable(tween(PULSAR_ROTATION_MILLIS, easing = LinearEasing)),
                 label = "beam",
             )
+            val settledAngle = remember { mutableFloatStateOf(PULSAR_REST_ANGLE) }
+            LaunchedEffect(state) {
+                if (state is ActState.Settled) settledAngle.floatValue = spinningAngle
+            }
+            val beamAngle = when {
+                rotating -> spinningAngle
+                state is ActState.Settled -> settledAngle.floatValue
+                else -> PULSAR_REST_ANGLE
+            }
             val phase = beamAngle % 180f
             val distanceFromSweep = min(abs(phase), 180f - abs(phase))
-            val flash = (1f - distanceFromSweep / 90f).coerceIn(0f, 1f).let { it * it }
+            val flash = if (rotating) (1f - distanceFromSweep / 90f).coerceIn(0f, 1f).let { it * it } else 0f
+            val coreColor = when (state) {
+                is ActState.Blocked -> BLOCKED_MARKER_COLOR
+                is ActState.Refused -> REFUSED_MARKER_COLOR
+                else -> Color.White
+            }
+            val coreBaseAlpha = if (state is ActState.Settled) 1f else 0.55f
 
             Box(
                 modifier = Modifier
-                    .size(beamLength, 2.dp)
-                    .graphicsLayer { rotationZ = beamAngle }
-                    .background(Color.White.copy(alpha = 0.30f)),
-            )
-            Box(
-                modifier = Modifier
-                    .size(coreDiameter)
-                    .graphicsLayer {
-                        val boost = 1f + flash * 0.6f
-                        scaleX = boost
-                        scaleY = boost
-                    }
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.55f + flash * 0.45f)),
-            )
+                    .tell(owesTell, weight)
+                    .clickable { engage() }
+                    .fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(beamLength, 2.dp)
+                        .graphicsLayer { rotationZ = beamAngle }
+                        .background(Color.White.copy(alpha = if (rotating) 0.30f else 0f)),
+                )
+                Box(
+                    modifier = Modifier
+                        .size(coreDiameter)
+                        .graphicsLayer {
+                            val boost = 1f + flash * 0.6f
+                            scaleX = boost
+                            scaleY = boost
+                        }
+                        .clip(CircleShape)
+                        .background(coreColor.copy(alpha = (coreBaseAlpha + flash * 0.45f).coerceAtMost(1f))),
+                )
+            }
         }
     }
 }
 
 private const val BLOOM_PHASE_END = 0.5f
 private val COLLAPSE_CORE_DIAMETER = 6.dp
+
+/** Where the bloom phase's own final frame leaves off (white, [BLOOM_END_ALPHA] opaque) -- the
+ *  collapse phase's fill starts here and ramps to opaque black over its own first third, rather
+ *  than snapping straight to solid black the instant [BLOOM_PHASE_END] is crossed. */
+private const val BLOOM_END_ALPHA = 0.75f
+private const val COLLAPSE_COLOR_RAMP_FRACTION = 3f
 
 /**
  * Supernova, then black hole -- a star's own chrome carrying a screen-scale destructive
@@ -309,7 +419,14 @@ private val COLLAPSE_CORE_DIAMETER = 6.dp
  * and whitens, with a faint expanding shockwave ring. Past the midpoint it collapses hard, down
  * to a small black core -- the real outcome of a massive star's core-collapse supernova -- with a
  * thin accretion ring in its own original color left glowing around the remnant once
- * [com.hereliesaz.conveyance.ActState.Settled].
+ * [com.hereliesaz.conveyance.ActState.Settled]. The fill's own color/alpha ramps continuously
+ * across the [BLOOM_PHASE_END] boundary (starting from the bloom's own last frame, white at
+ * [BLOOM_END_ALPHA]) rather than snapping straight to opaque black.
+ *
+ * [com.hereliesaz.conveyance.ActState.Ready]/[com.hereliesaz.conveyance.ActState.Blocked] both
+ * render the plain resting star -- a blocked one full-opacity ringed in [BLOCKED_MARKER_COLOR]
+ * rather than dimmed. [com.hereliesaz.conveyance.ActState.Refused] flashes
+ * [REFUSED_MARKER_COLOR] before settling back to resting.
  *
  * This is one star collapsing on its own, not an actual black hole consuming separately
  * addressed matter -- for that, see [BlackHoleField] (`BlackHoleField.kt`), which uses
@@ -331,8 +448,30 @@ fun Collapse(request: ComposableRequest) {
                 is ActState.Yielding -> yielding ?: 0f
                 else -> 0f
             }
+            val refusedFlash = remember { Animatable(0f) }
+            LaunchedEffect(state) {
+                if (state is ActState.Refused) {
+                    refusedFlash.snapTo(1f)
+                    refusedFlash.animateTo(0f, tween(500))
+                }
+            }
+            val clickModifier = Modifier.tell(owesTell, weight).clickable { engage() }
 
-            if (progress < BLOOM_PHASE_END) {
+            if (progress <= 0f) {
+                Box(
+                    modifier = clickModifier
+                        .size(starSize.diameter)
+                        .clip(CircleShape)
+                        .background(lerp(spectralClass.color, REFUSED_MARKER_COLOR, refusedFlash.value))
+                        .let { base ->
+                            if (state is ActState.Blocked) {
+                                base.border(2.dp, BLOCKED_MARKER_COLOR, CircleShape)
+                            } else {
+                                base
+                            }
+                        },
+                )
+            } else if (progress < BLOOM_PHASE_END) {
                 val bloomT = (progress / BLOOM_PHASE_END).coerceIn(0f, 1f)
                 val diameter = lerpDp(starSize.diameter, boxDiameter, bloomT)
                 val color = lerp(spectralClass.color, Color.White, bloomT)
@@ -343,10 +482,10 @@ fun Collapse(request: ComposableRequest) {
                         .border(1.dp, Color.White.copy(alpha = (1f - bloomT) * 0.5f), CircleShape),
                 )
                 Box(
-                    modifier = Modifier
+                    modifier = clickModifier
                         .size(diameter)
                         .clip(CircleShape)
-                        .background(color.copy(alpha = 1f - bloomT * 0.25f)),
+                        .background(color.copy(alpha = 1f - bloomT * (1f - BLOOM_END_ALPHA))),
                 )
             } else {
                 val collapseT = ((progress - BLOOM_PHASE_END) / (1f - BLOOM_PHASE_END)).coerceIn(0f, 1f)
@@ -360,11 +499,18 @@ fun Collapse(request: ComposableRequest) {
                             .border(1.5.dp, spectralClass.color.copy(alpha = ringAlpha * 0.7f), CircleShape),
                     )
                 }
+                // Continuous with the bloom phase's own final frame (white, BLOOM_END_ALPHA) at
+                // collapseT = 0, ramping to opaque black by a third of the way through the
+                // collapse -- no color/alpha pop at the BLOOM_PHASE_END boundary.
+                val colorRampT = (collapseT * COLLAPSE_COLOR_RAMP_FRACTION).coerceIn(0f, 1f)
                 Box(
-                    modifier = Modifier
+                    modifier = clickModifier
                         .size(diameter)
                         .clip(CircleShape)
-                        .background(Color.Black),
+                        .background(
+                            lerp(Color.White, Color.Black, colorRampT)
+                                .copy(alpha = BLOOM_END_ALPHA + (1f - BLOOM_END_ALPHA) * colorRampT),
+                        ),
                 )
             }
         }

@@ -99,6 +99,24 @@ Four templates plus two genuine cross-element/multi-body composables (`BlackHole
 two stars can't themselves each have their own planets -- `BinaryStarSystem` and `StarSystem`
 don't compose.
 
+An adversarial audit found and this repo has since fixed three real defects, beyond the
+already-known missing click wiring (every template, plus `BlackHoleField`'s `SpawnControl`/
+`DebrisChip` and both of `BinaryStarSystem`'s stars, now attach
+`Modifier.tell(owesTell, weight).clickable { engage() }`, matching
+`conveyance-demo/.../Gallery.kt`'s own wiring): none of the four templates distinguished
+`ActState.Blocked`/`ActState.Refused` from the other states -- `Pulsar` ignored act state
+entirely, and `MoonLoading` rendered `Ready`, `Blocked`, `Settled`, and `Refused` pixel-identically
+-- a real violation of the framework's own Law 1 ("all five states arrive through one scope").
+All four templates now render each state distinctly: `Blocked` marks itself at full opacity (never
+dimmed -- `ActState.Blocked`'s own doc says so explicitly), `Refused` flashes a distinct color,
+`Pulsar` only rotates/flashes while genuinely `Yielding`, and `MoonLoading`'s moon changes color
+by state since its position alone (12 o'clock) can't tell "not started" from "done." `Collapse`
+also had a real defect: its bloom-to-collapse fill snapped from white-75%-opaque straight to
+solid black the instant progress crossed the halfway point -- a visible one-frame pop -- now a
+continuous ramp starting from the bloom phase's own last frame. And `MoonLoading`'s
+indeterminate-to-determinate transition used to teleport the moon instantly; it now animates from
+wherever the spin last visibly was.
+
 ## Using it
 
 ```kotlin
