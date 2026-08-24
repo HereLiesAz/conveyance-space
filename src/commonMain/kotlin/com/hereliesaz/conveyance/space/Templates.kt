@@ -268,8 +268,14 @@ private val COLLAPSE_CORE_DIAMETER = 6.dp
  * and whitens, with a faint expanding shockwave ring. Past the midpoint it collapses hard, down
  * to a small black core -- the real outcome of a massive star's core-collapse supernova -- with a
  * thin accretion ring in its own original color left glowing around the remnant once
- * [com.hereliesaz.conveyance.ActState.Settled], the "everything around it" the ring is left
- * holding.
+ * [com.hereliesaz.conveyance.ActState.Settled].
+ *
+ * This is one star collapsing on its own, not an actual black hole consuming separately
+ * addressed matter -- for that, see [BlackHoleField] (`BlackHoleField.kt`), which uses
+ * Conveyance's real `Collection` primitive for genuine cross-element consumption, the same
+ * pattern `conveyance-bacterium`'s `PredatorColony` uses for predator/prey; it isn't a
+ * [Templates.registry] entry because [Collection] needs a caller-owned list of per-item acts, a
+ * shape a single `ComposableRequest` can't express.
  */
 @Composable
 fun Collapse(request: ComposableRequest) {

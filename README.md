@@ -64,18 +64,27 @@ Example composable manifest referencing this library:
   - `space.star.collapse` -- supernova, then black hole: the first half of `ActState.Yielding`'s
     progress blooms and whitens the star with an expanding shockwave ring; past the midpoint it
     collapses hard to a small black core, leaving a thin accretion ring in the star's own
-    original color glowing around the remnant once `Settled`. Driven entirely by the star's own
-    chrome -- never by moving anything else, since motion across elements stays Conveyance's own
-    business, not this library's.
+    original color glowing around the remnant once `Settled`. Self-contained -- one star
+    collapsing on its own, not an actual black hole consuming separately addressed matter; see
+    `BlackHoleField` below for that.
+- **`BlackHoleField`/`DebrisRequest`** (`BlackHoleField.kt`) -- genuine cross-element consumption,
+  built on Conveyance's own `Collection` primitive: `space.star.collapse` at the center, alongside
+  a real population of independently addressed matter, each carrying its own `Act`. Consuming a
+  piece is the host removing its `SubjectId` from the `debris` list it passes in; `Collection`
+  renders the framework's own Ghost residue for it. This is the same pattern
+  `conveyance-bacterium`'s `PredatorColony` uses for predator/prey, here giving the black hole a
+  real "sucks up everything around it" rather than chrome merely implying it. **Not** a
+  `Templates.registry` entry, for the same reason `PredatorColony` isn't: every composable
+  manifest element carries exactly one `act` (azphalt `spec/composable.md`), and `Collection`
+  inherently needs a caller-owned list of items each with its *own* act -- a shape the
+  single-element `ComposableRequest` can't express. A host wires this up directly.
 
 ## Status
 
-A first real slice, not a finished set. Four templates exist, each covering one of the concept's
-named phenomena, but each is a single instance: `space.star.system` doesn't support nested
-moons around its own planets, `space.star.pulsar` isn't wired to `space.star.system`'s star
-(a system's star can't currently *be* a pulsar), and `space.star.collapse`'s "sucks up everything
-around it" is only this element's own chrome -- no other on-screen element is actually pulled
-toward it, since that would mean moving elements this library doesn't own.
+Four templates plus one genuine cross-element composable (`BlackHoleField`), each covering one of
+the concept's named phenomena, but each is a single instance: `space.star.system` doesn't support
+nested moons around its own planets, and `space.star.pulsar` isn't wired to `space.star.system`'s
+star (a system's star can't currently *be* a pulsar).
 
 ## Using it
 
