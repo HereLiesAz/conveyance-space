@@ -32,6 +32,14 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
+        val desktopTest by getting {
+            dependencies {
+                // The real Skia bindings for the current OS -- without this, any test touching an
+                // actual Path/Canvas (Compose Multiplatform's own real graphics, as opposed to a
+                // stub) fails to load the native library rather than running.
+                implementation(compose.desktop.currentOs)
+            }
+        }
     }
 }
 
