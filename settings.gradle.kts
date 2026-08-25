@@ -15,7 +15,7 @@ plugins {
     // own. This plugin is exactly that: it lets Gradle fetch a matching JDK itself when none of the
     // locally installed ones satisfy the toolchain request, the same way it already does for the
     // Gradle wrapper's own distribution.
-    id("org.gradle.toolchains.foojay-resolver-convention") version "0.8.0"
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
 rootProject.name = "conveyance-space"
