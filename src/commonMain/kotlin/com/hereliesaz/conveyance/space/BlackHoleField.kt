@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.hereliesaz.conveyance.Act
 import com.hereliesaz.conveyance.SubjectId
@@ -76,6 +77,7 @@ private fun ActScope.SpawnControl() {
         modifier = Modifier
             .tell(owesTell, weight)
             .clickable { engage() }
+            .testTag("space.blackhole.spawn")
             .size(10.dp)
             .clip(CircleShape)
             .background(Color(0xFF7E97A6)),
@@ -91,6 +93,7 @@ private fun DebrisChip(debris: DebrisRequest) {
             modifier = Modifier
                 .tell(owesTell, weight)
                 .clickable { engage() }
+                .testTag("space.blackhole.debris.${debris.subject.value}")
                 .padding(2.dp)
                 .size(DEBRIS_DIAMETER)
                 .clip(CircleShape)

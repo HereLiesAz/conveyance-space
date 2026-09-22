@@ -31,6 +31,14 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            // Templates.kt (and BlackHoleField.kt/BinaryStars.kt) are composables, and the
+            // defects an audit found there -- state-indistinguishability across all four
+            // templates, the Collapse bloom-to-collapse color pop, MoonLoading's
+            // indeterminate-to-determinate teleport, and BlackHoleField/BinaryStarSystem having
+            // zero callers anywhere -- are only observable by actually composing one, clicking
+            // it, and reading what came out. Same harness conveyance-h2g2's own commonTest uses.
+            @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+            implementation(compose.uiTest)
         }
         val desktopTest by getting {
             dependencies {

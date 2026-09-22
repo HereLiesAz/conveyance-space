@@ -31,6 +31,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp as lerpDp
@@ -58,6 +61,36 @@ private val BLOCKED_MARKER_COLOR = Color(0xFFE8B339)
 /** A visible marker for [ActState.Refused] -- distinct from [BLOCKED_MARKER_COLOR] so a person
  *  can tell "can't yet" from "tried and failed" at a glance. */
 private val REFUSED_MARKER_COLOR = Color(0xFFE0453B)
+
+/**
+ * A short, human-readable label for [ActState] -- attached to every template's own clickable
+ * element via `Modifier.semantics { stateDescription = ... }` so all five states are not just
+ * *visually* distinct (an audit found they weren't, across all four templates -- see each
+ * function's own doc comment) but also mechanically distinguishable, from outside the composable,
+ * by anything reading its semantics tree: an accessibility service, or a test.
+ */
+internal fun ActState.describe(): String = when (this) {
+    ActState.Ready -> "ready"
+    is ActState.Blocked -> "blocked"
+    is ActState.Yielding -> "yielding"
+    ActState.Settled -> "settled"
+    is ActState.Refused -> "refused"
+}
+
+/**
+ * [ActState.Blocked]'s own visual marker: a ring, at full opacity, never a reduction in alpha
+ * ([ActState.Blocked]'s own doc: "Never renders as reduced opacity"). Shared by [StarSystem] and
+ * [Collapse] -- both mark their resting star the same way -- so the rule lives in one place rather
+ * than two copies that could drift.
+ */
+internal fun isBlockedRing(state: ActState): Boolean = state is ActState.Blocked
+
+/**
+ * [ActState.Refused]'s flash: a lerp from [base] toward [REFUSED_MARKER_COLOR], driven by
+ * [refusedFlash] (1f the instant a refusal lands, animated back to 0f). Shared by [StarSystem]
+ * and [Collapse]'s own resting-star fill, for the same reason [isBlockedRing] is.
+ */
+internal fun refusedTint(base: Color, refusedFlash: Float): Color = lerp(base, REFUSED_MARKER_COLOR, refusedFlash)
 
 /**
  * What a `kind: "composable"` `.azp` package's `elements[]` entry (azphalt `spec/composable.md`)
@@ -214,11 +247,13 @@ fun StarSystem(request: ComposableRequest) {
                 modifier = Modifier
                     .tell(owesTell, weight)
                     .clickable { engage() }
+                    .testTag("space.star.system.core")
+                    .semantics { stateDescription = state.describe() }
                     .size(starSize.diameter)
                     .clip(CircleShape)
-                    .background(lerp(spectralClass.color, REFUSED_MARKER_COLOR, refusedFlash.value))
+                    .background(refusedTint(spectralClass.color, refusedFlash.value))
                     .let { base ->
-                        if (state is ActState.Blocked) base.border(2.dp, BLOCKED_MARKER_COLOR, CircleShape) else base
+                        if (isBlockedRing(state)) base.border(2.dp, BLOCKED_MARKER_COLOR, CircleShape) else base
                     },
             )
         }
@@ -232,6 +267,31 @@ private const val MOON_SPIN_MILLIS = 1400
 private const val ANGLE_SETTLE_MILLIS = 260
 private val READY_MOON_COLOR = Color(0xFFC9C9C9)
 private val SETTLED_MOON_COLOR = Color(0xFFFFFFFF)
+
+/**
+ * [MoonLoading]'s moon color, by state -- extracted so the exact defect an audit found (`Ready`,
+ * `Blocked`, `Settled`, and `Refused` all rendering pixel-identically, since position alone parks
+ * the moon at the same 12-o'clock spot for both `Ready` and `Settled`) is pinned directly: these
+ * four branches must produce four distinct colors.
+ */
+internal fun moonStateColor(state: ActState): Color = when (state) {
+    is ActState.Blocked -> BLOCKED_MARKER_COLOR
+    is ActState.Refused -> REFUSED_MARKER_COLOR
+    ActState.Settled -> SETTLED_MOON_COLOR
+    else -> READY_MOON_COLOR
+}
+
+/**
+ * Where [MoonLoading]'s settle animation should snap from when the spin stops being indeterminate,
+ * or `null` when it should simply animate onward from wherever it already sat.
+ *
+ * This is the exact fix for the teleport defect an audit found: leaving indeterminate spin used to
+ * jump straight to the new determinate target from an arbitrary spin position. The fix seeds from
+ * [spinAngle] -- wherever the indeterminate spin last visibly was -- rather than from the
+ * determinate target itself or the rest angle.
+ */
+internal fun moonSeedAngle(wasIndeterminate: Boolean, spinAngle: Float): Float? =
+    if (wasIndeterminate) spinAngle else null
 
 /**
  * A loading indicator: a moon orbiting a planet. Indeterminate progress
@@ -279,28 +339,23 @@ fun MoonLoading(request: ComposableRequest) {
                     wasIndeterminate = true
                     return@LaunchedEffect
                 }
-                if (wasIndeterminate) {
-                    // Seed from wherever the indeterminate spin last visibly was, so this doesn't
-                    // teleport from an arbitrary spin position straight to the new target.
-                    settledAngle.snapTo(spinAngle)
-                    wasIndeterminate = false
-                }
+                // Seed from wherever the indeterminate spin last visibly was, so this doesn't
+                // teleport from an arbitrary spin position straight to the new target.
+                moonSeedAngle(wasIndeterminate, spinAngle)?.let { settledAngle.snapTo(it) }
+                wasIndeterminate = false
                 settledAngle.animateTo(determinateTarget, tween(ANGLE_SETTLE_MILLIS))
             }
             val angleDegrees = if (indeterminate) spinAngle else settledAngle.value
             val radians = angleDegrees * PI / 180.0
             val moonOrbitRadiusPx = with(LocalDensity.current) { moonOrbitRadiusDp.dp.toPx() }
-            val moonColor = when (state) {
-                is ActState.Blocked -> BLOCKED_MARKER_COLOR
-                is ActState.Refused -> REFUSED_MARKER_COLOR
-                ActState.Settled -> SETTLED_MOON_COLOR
-                else -> READY_MOON_COLOR
-            }
+            val moonColor = moonStateColor(state)
 
             Box(
                 modifier = Modifier
                     .tell(owesTell, weight)
                     .clickable { engage() }
+                    .testTag("space.moon.loading.planet")
+                    .semantics { stateDescription = state.describe() }
                     .size(planetDiameter)
                     .clip(CircleShape)
                     .background(spectralClass.color),
@@ -323,6 +378,17 @@ fun MoonLoading(request: ComposableRequest) {
 
 private const val PULSAR_ROTATION_MILLIS = 900
 private const val PULSAR_REST_ANGLE = 0f
+
+/**
+ * [Pulsar]'s core color, by state -- the fix for the defect an audit found: [Pulsar] used to
+ * ignore act state entirely, rendering the same regardless of [ActState]. [ActState.Blocked]/
+ * [ActState.Refused] now mark the core distinctly from the resting/rotating white.
+ */
+internal fun pulsarCoreColor(state: ActState): Color = when (state) {
+    is ActState.Blocked -> BLOCKED_MARKER_COLOR
+    is ActState.Refused -> REFUSED_MARKER_COLOR
+    else -> Color.White
+}
 
 /**
  * A rotating lighthouse beam, the real mechanism behind a pulsar's regular flash -- not a pulsing
@@ -366,17 +432,15 @@ fun Pulsar(request: ComposableRequest) {
             val phase = beamAngle % 180f
             val distanceFromSweep = min(abs(phase), 180f - abs(phase))
             val flash = if (rotating) (1f - distanceFromSweep / 90f).coerceIn(0f, 1f).let { it * it } else 0f
-            val coreColor = when (state) {
-                is ActState.Blocked -> BLOCKED_MARKER_COLOR
-                is ActState.Refused -> REFUSED_MARKER_COLOR
-                else -> Color.White
-            }
+            val coreColor = pulsarCoreColor(state)
             val coreBaseAlpha = if (state is ActState.Settled) 1f else 0.55f
 
             Box(
                 modifier = Modifier
                     .tell(owesTell, weight)
                     .clickable { engage() }
+                    .testTag("space.pulsar.core")
+                    .semantics { stateDescription = state.describe() }
                     .fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
@@ -410,6 +474,20 @@ private val COLLAPSE_CORE_DIAMETER = 6.dp
  *  than snapping straight to solid black the instant [BLOOM_PHASE_END] is crossed. */
 private const val BLOOM_END_ALPHA = 0.75f
 private const val COLLAPSE_COLOR_RAMP_FRACTION = 3f
+
+/** The bloom phase's own fill color at [bloomT] -- white at `bloomT = 1f`, [Collapse]'s starting point for the collapse phase. */
+internal fun collapseBloomColor(base: Color, bloomT: Float): Color = lerp(base, Color.White, bloomT)
+
+/** The bloom phase's own fill alpha at [bloomT] -- [BLOOM_END_ALPHA] at `bloomT = 1f`. */
+internal fun collapseBloomAlpha(bloomT: Float): Float = 1f - bloomT * (1f - BLOOM_END_ALPHA)
+
+/** The collapse phase's own fill color at [colorRampT] -- white at `colorRampT = 0f`, the exact
+ *  value [collapseBloomColor] produces at `bloomT = 1f`, so the two phases meet without a pop. */
+internal fun collapseRampColor(colorRampT: Float): Color = lerp(Color.White, Color.Black, colorRampT)
+
+/** The collapse phase's own fill alpha at [colorRampT] -- [BLOOM_END_ALPHA] at `colorRampT = 0f`,
+ *  the exact value [collapseBloomAlpha] produces at `bloomT = 1f`. */
+internal fun collapseRampAlpha(colorRampT: Float): Float = BLOOM_END_ALPHA + (1f - BLOOM_END_ALPHA) * colorRampT
 
 /**
  * Supernova, then black hole -- a star's own chrome carrying a screen-scale destructive
@@ -456,15 +534,17 @@ fun Collapse(request: ComposableRequest) {
                 }
             }
             val clickModifier = Modifier.tell(owesTell, weight).clickable { engage() }
+                .testTag("space.collapse.body")
+                .semantics { stateDescription = state.describe() }
 
             if (progress <= 0f) {
                 Box(
                     modifier = clickModifier
                         .size(starSize.diameter)
                         .clip(CircleShape)
-                        .background(lerp(spectralClass.color, REFUSED_MARKER_COLOR, refusedFlash.value))
+                        .background(refusedTint(spectralClass.color, refusedFlash.value))
                         .let { base ->
-                            if (state is ActState.Blocked) {
+                            if (isBlockedRing(state)) {
                                 base.border(2.dp, BLOCKED_MARKER_COLOR, CircleShape)
                             } else {
                                 base
@@ -474,7 +554,6 @@ fun Collapse(request: ComposableRequest) {
             } else if (progress < BLOOM_PHASE_END) {
                 val bloomT = (progress / BLOOM_PHASE_END).coerceIn(0f, 1f)
                 val diameter = lerpDp(starSize.diameter, boxDiameter, bloomT)
-                val color = lerp(spectralClass.color, Color.White, bloomT)
                 Box(
                     modifier = Modifier
                         .size(diameter * 1.6f)
@@ -485,7 +564,7 @@ fun Collapse(request: ComposableRequest) {
                     modifier = clickModifier
                         .size(diameter)
                         .clip(CircleShape)
-                        .background(color.copy(alpha = 1f - bloomT * (1f - BLOOM_END_ALPHA))),
+                        .background(collapseBloomColor(spectralClass.color, bloomT).copy(alpha = collapseBloomAlpha(bloomT))),
                 )
             } else {
                 val collapseT = ((progress - BLOOM_PHASE_END) / (1f - BLOOM_PHASE_END)).coerceIn(0f, 1f)
@@ -507,10 +586,7 @@ fun Collapse(request: ComposableRequest) {
                     modifier = clickModifier
                         .size(diameter)
                         .clip(CircleShape)
-                        .background(
-                            lerp(Color.White, Color.Black, colorRampT)
-                                .copy(alpha = BLOOM_END_ALPHA + (1f - BLOOM_END_ALPHA) * colorRampT),
-                        ),
+                        .background(collapseRampColor(colorRampT).copy(alpha = collapseRampAlpha(colorRampT))),
                 )
             }
         }

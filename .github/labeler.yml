@@ -1,0 +1,4 @@
+# Empty config: no path-based label rules defined yet. Required to exist so the
+# actions/labeler step (via the shared pr-labeler.yml reusable workflow) has a
+# config file to read instead of failing with "config file was not found".
+{}
