@@ -117,6 +117,35 @@ continuous ramp starting from the bloom phase's own last frame. And `MoonLoading
 indeterminate-to-determinate transition used to teleport the moon instantly; it now animates from
 wherever the spin last visibly was.
 
+A second adversarial audit found and this repo has since fixed four more real defects. Two were
+CI-only: `.github/workflows/android-ci.yml` ran `./gradlew test`/`./gradlew assembleDebug`,
+neither of which exist in this Kotlin Multiplatform *library* project (confirmed against
+`./gradlew tasks --all`; the real names are `desktopTest` and `assembleAndroidMain`), and it also
+built/signed/released a nonexistent debug APK -- there is no `com.android.application` module
+here to produce one. Both fixed: the workflow now runs `desktopTest` and `assembleAndroidMain`
+only. `.github/workflows/jekyll-gh-pages.yml` built `source: ./docs/`, a directory this repo has
+never had; deleted, since nothing here describes any intent to add one.
+
+The headline finding: `BlackHoleField`/`DebrisRequest` and `BinaryStarSystem` had zero callers
+anywhere, in this repo or in `conveyance-demo`'s `StyleShowcase.kt` (which only iterates
+`Templates.registry`'s four entries) -- declared, documented at length above, and never once
+proven reachable. Neither belongs in `Templates.registry` by design (see each one's own doc
+comment), and this repo has no demo/gallery module of its own the way `convey`'s `dev-app`/
+`android-dev-app` do, so there was nowhere to wire a visual call site into. Fixed the way the
+audit's own fallback describes: `src/commonTest/kotlin/.../CrossElementCompositionTest.kt` now
+composes both for real, through a Compose UI test harness (`compose.uiTest`, added to
+`commonTest`'s dependencies for exactly this), clicks their real controls, and checks the specific
+claims each composable's doc comment makes -- `BinaryStarSystem`'s two stars each engaging only
+their own `Act` and its orbital-radius math (`binaryOrbitRadii`, pulled out into its own testable
+function) actually matching real binary-star mechanics, and a `DebrisRequest`'s consumption really
+removing a subject from a host-owned list, per `BlackHoleField`'s own "this library never removes
+anything itself" claim -- rather than merely confirming the two compile. `TemplatesTest.kt` (also
+new; `commonTest` had no tests at all for `Templates.kt` before this) separately regression-tests
+the three template defects the first audit fixed, directly: the bloom/collapse color-continuity
+math, the moon's teleport-seed logic, and, via a `Modifier.semantics { stateDescription = ... }`
+now attached to each template's own clickable element, that `Ready`/`Blocked`/`Refused`/`Settled`
+really do render distinguishably from one another end to end.
+
 ## Using it
 
 ```kotlin

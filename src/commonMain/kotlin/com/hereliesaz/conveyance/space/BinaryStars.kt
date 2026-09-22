@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.hereliesaz.conveyance.compose.Offer
@@ -27,6 +28,26 @@ import kotlin.math.sin
 
 private const val BINARY_ORBIT_MILLIS = 5000
 private const val BINARY_SEPARATION_DP = 90f
+
+/**
+ * Each star's own orbital radius around the shared barycenter, given both stars' diameters (a
+ * mass stand-in) and the [totalSeparation] the two radii always sum to. Inversely proportional to
+ * each star's own diameter -- the more massive (larger) star sits closer to the barycenter, the
+ * lighter one swings wider, the same reason Sirius A (the heavier of that real pair) traces the
+ * tighter orbit than Sirius B. Pulled out of [BinaryStarSystem] itself so the real orbital-mechanics
+ * claim -- not just "it compiles and looks plausible" -- is directly testable: given two diameters,
+ * this returns exactly (primaryOrbit, companionOrbit).
+ *
+ * Falls back to splitting [totalSeparation] evenly when both diameters are non-positive, rather
+ * than dividing by zero.
+ */
+internal fun binaryOrbitRadii(primaryDiameter: Float, companionDiameter: Float, totalSeparation: Float): Pair<Float, Float> {
+    val totalMass = primaryDiameter + companionDiameter
+    if (totalMass <= 0f) return (totalSeparation / 2f) to (totalSeparation / 2f)
+    val primaryOrbit = totalSeparation * (companionDiameter / totalMass)
+    val companionOrbit = totalSeparation * (primaryDiameter / totalMass)
+    return primaryOrbit to companionOrbit
+}
 
 /**
  * A binary star system: [primary] and [companion] orbit their shared center of mass (the
@@ -52,9 +73,11 @@ fun BinaryStarSystem(primary: ComposableRequest, companion: ComposableRequest) {
     // The barycenter sits closer to whichever star is "heavier" (bigger StarSize): each star's
     // own orbital radius is inversely proportional to its own mass stand-in, the two always
     // summing to BINARY_SEPARATION_DP -- a fixed total separation, only the split point moves.
-    val totalMass = primarySize.diameter.value + companionSize.diameter.value
-    val primaryOrbitDp = BINARY_SEPARATION_DP * (companionSize.diameter.value / totalMass)
-    val companionOrbitDp = BINARY_SEPARATION_DP * (primarySize.diameter.value / totalMass)
+    val (primaryOrbitDp, companionOrbitDp) = binaryOrbitRadii(
+        primarySize.diameter.value,
+        companionSize.diameter.value,
+        BINARY_SEPARATION_DP,
+    )
 
     val transition = rememberInfiniteTransition(label = "binary")
     val angleDegrees by transition.animateFloat(
@@ -78,6 +101,7 @@ fun BinaryStarSystem(primary: ComposableRequest, companion: ComposableRequest) {
                 modifier = Modifier
                     .tell(owesTell, weight)
                     .clickable { engage() }
+                    .testTag("space.binary.primary")
                     .size(primarySize.diameter)
                     .offset {
                         IntOffset(
@@ -94,6 +118,7 @@ fun BinaryStarSystem(primary: ComposableRequest, companion: ComposableRequest) {
                 modifier = Modifier
                     .tell(owesTell, weight)
                     .clickable { engage() }
+                    .testTag("space.binary.companion")
                     .size(companionSize.diameter)
                     .offset {
                         IntOffset(
