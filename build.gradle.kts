@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.kmp.library)
@@ -7,7 +9,13 @@ plugins {
 }
 
 group = "com.hereliesaz.conveyance"
-version = "0.1.0"
+// Read from version.properties, the same file CI stamps releases from. JitPack overrides both
+// group and version from the git ref it builds; this is what a local `publishToMavenLocal` produces.
+version = Properties().run {
+    file("version.properties").inputStream().use { load(it) }
+    listOf("versionMajor", "versionMinor", "versionPatch", "versionBuild")
+        .joinToString(".") { getProperty(it).trim() }
+}
 
 kotlin {
     jvmToolchain(libs.versions.jvmToolchain.get().toInt())
@@ -21,10 +29,12 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            // Conveyance has no tagged release yet, so this resolves against `main` via JitPack.
-            // Once Conveyance cuts a release tag, pin to that instead of `main-SNAPSHOT`.
-            api("com.github.HereLiesAz.Conveyance:conveyance-core:main-SNAPSHOT")
-            api("com.github.HereLiesAz.Conveyance:conveyance-compose:main-SNAPSHOT")
+            // Pinned to an exact Conveyance commit JitPack has built (status "ok", all core/compose
+            // target publications present). A floating main-SNAPSHOT makes KMP metadata
+            // non-reproducible. Swap for a release tag once Conveyance cuts one.
+            val conveyanceRevision = "bdc4834313edfe27d74172364fb349896ef5e095"
+            api("com.github.HereLiesAz.Conveyance:conveyance-core:$conveyanceRevision")
+            api("com.github.HereLiesAz.Conveyance:conveyance-compose:$conveyanceRevision")
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.ui)
