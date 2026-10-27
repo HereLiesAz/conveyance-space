@@ -25,7 +25,7 @@ Example composable manifest referencing this library:
   "name": "Example",
   "version": "1.0.0",
   "kind": "composable",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "compat": ">=0.1",
   "composable": {
     "library": { "group": "com.hereliesaz.conveyance", "artifact": "conveyance-space", "version": "0.1.0" },

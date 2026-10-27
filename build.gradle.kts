@@ -70,6 +70,13 @@ publishing {
             description.set(
                 "Celestial-mechanics templates for Conveyance -- stellar classification, Kepler orbits, pulsars, and stellar collapse, reimplemented as Conveyance-native composables.",
             )
+            url.set("https://github.com/HereLiesAz/conveyance-space")
+            licenses {
+                license {
+                    name.set("Apache License 2.0")
+                    url.set("https://www.apache.org/licenses/LICENSE-2.0")
+                }
+            }
         }
     }
 }
