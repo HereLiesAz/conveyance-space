@@ -153,12 +153,11 @@ repositories {
     maven("https://jitpack.io")
 }
 dependencies {
-    implementation("com.github.HereLiesAz:conveyance-space:main-SNAPSHOT")
+    implementation("com.github.HereLiesAz:conveyance-space:0.5.0")
 }
 ```
 
 Resolved via [JitPack](https://jitpack.io) directly from this repository -- `conveyance-core` and
 `conveyance-compose` both apply `maven-publish`, which is all JitPack needs, so there is no
-separate publish step to configure. Conveyance itself has no tagged release yet, so this artifact
-and its upstream dependency on Conveyance both pin to `main-SNAPSHOT` for now; switch both to a
-real tag once one exists.
+separate publish step to configure. This artifact pins its own
+dependency on Conveyance to the matching `0.5.0` tag; `main-SNAPSHOT` tracks `main` instead.
