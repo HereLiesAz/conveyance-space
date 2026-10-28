@@ -29,10 +29,10 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            // Pinned to an exact Conveyance commit JitPack has built (status "ok", all core/compose
+            // Pinned to Conveyance's 0.5.0 release tag (JitPack build status "ok", all core/compose
             // target publications present). A floating main-SNAPSHOT makes KMP metadata
-            // non-reproducible. Swap for a release tag once Conveyance cuts one.
-            val conveyanceRevision = "bdc4834313edfe27d74172364fb349896ef5e095"
+            // non-reproducible and can resolve stale per-target publications through JitPack.
+            val conveyanceRevision = "0.5.0"
             api("com.github.HereLiesAz.Conveyance:conveyance-core:$conveyanceRevision")
             api("com.github.HereLiesAz.Conveyance:conveyance-compose:$conveyanceRevision")
             implementation(compose.runtime)
